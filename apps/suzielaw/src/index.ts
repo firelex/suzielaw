@@ -23,6 +23,7 @@ import {
     createPlatformRequestMiddleware,
     createWebhookRouter,
     registerWithPlatform,
+    runWebhookChatTurn,
     type PlatformBridgeConfig,
 } from '@teamsuzie/platform-bridge';
 import {
@@ -265,7 +266,13 @@ const app = express();
 app.use(cors({ origin: config.allowedOrigin, credentials: true }));
 app.use(express.json({ limit: '2mb' }));
 app.use(createSessionMiddleware());
-app.use(createCsrfMiddleware({ cookieName: 'suzielaw.csrf' }));
+app.use(createCsrfMiddleware({
+    cookieName: 'suzielaw.csrf',
+    // Mothership webhooks authenticate via X-Platform-Token (handled by
+    // createPlatformTokenGuard inside the router) — they have no CSRF cookie
+    // because they're server-to-server, not browser-driven.
+    skipPaths: ['/api/webhook/mothership', '/api/webhook/mothership/'],
+}));
 app.use('/api', createAuthRouter({ budget: tokenBudget }));
 app.use(
   '/api',
@@ -807,48 +814,11 @@ const platformBridgeConfig: PlatformBridgeConfig = {
     platformToken: config.platform?.token,
 };
 
-// Run a one-shot agent turn for an inter-agent DM. No persona, no workflow,
-// no persisted chat — just the default Counsel system prompt + the standard
-// tool set. The caller (mothership) treats this as a non-streaming HTTP call,
-// so we accumulate chunks into a single string.
-async function runInterAgentTurn(
-    fromAgentName: string,
-    message: string,
-    transcript?: Array<{ from: string; text: string }>,
-): Promise<string> {
-    const agentTarget = resolveAgentTarget(config.agent.model, {}, config.agent);
-    const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-    const systemPrompt = `${config.agent.systemPrompt.replace('{{DATE}}', today)}\n\nYou are responding to another AI agent (${fromAgentName}), not a human end user. Reply concisely and directly.`;
-
-    const messages: ChatMessage[] = [];
-    if (transcript && transcript.length > 0) {
-        const transcriptText = transcript.map(t => `${t.from}: ${t.text}`).join('\n');
-        messages.push({ role: 'user', content: `Conversation so far:\n${transcriptText}\n\n${fromAgentName}: ${message}` });
-    } else {
-        messages.push({ role: 'user', content: `${fromAgentName} says: ${message}` });
-    }
-
-    let assistantText = '';
-    for await (const event of runChatTurn({
-        agent: agentTarget,
-        messages,
-        tools: activeTools(),
-        toolCtx,
-        systemPrompt,
-        maxIterations: config.tools.maxIterations,
-    })) {
-        if (event.type === 'chunk') {
-            assistantText += event.text;
-        } else if (event.type === 'error') {
-            throw new Error(event.message);
-        } else if (event.type === 'done') {
-            break;
-        }
-    }
-    return assistantText.trim() || '[empty response]';
-}
-
-// Webhook endpoint for mothership (install/uninstall/dm/ping)
+// Webhook endpoint for mothership (install/uninstall/dm/ping). The DM handler
+// delegates to runWebhookChatTurn from @teamsuzie/platform-bridge, which owns
+// the "drain runChatTurn into a single string + frame the prompt for an
+// agent-to-agent reply" boilerplate. We just supply the agent target, tools,
+// and base system prompt — all suzielaw-specific.
 if (config.platform?.token) {
     app.use('/api/webhook/mothership', createWebhookRouter(platformBridgeConfig, {
         onInstall: async (ctx) => {
@@ -860,7 +830,17 @@ if (config.platform?.token) {
         onDirectMessage: async (ctx) => {
             try {
                 const transcript = (ctx.context as { transcript?: Array<{ from: string; text: string }> } | undefined)?.transcript;
-                const response = await runInterAgentTurn(ctx.from_agent.name, ctx.message, transcript);
+                const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+                const response = await runWebhookChatTurn({
+                    agent: resolveAgentTarget(config.agent.model, {}, config.agent),
+                    tools: activeTools(),
+                    toolCtx,
+                    systemPrompt: config.agent.systemPrompt.replace('{{DATE}}', today),
+                    fromAgentName: ctx.from_agent.name,
+                    message: ctx.message,
+                    transcript,
+                    maxIterations: config.tools.maxIterations,
+                });
                 return { response };
             } catch (err: any) {
                 console.error(`[SUZIELAW] DM from ${ctx.from_agent.name} failed:`, err.message);
