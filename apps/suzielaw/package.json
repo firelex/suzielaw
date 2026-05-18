@@ -29,6 +29,7 @@
     "@teamsuzie/sharing": "link:../../../open_teamsuzie/packages/sharing",
     "@teamsuzie/chats": "link:../../../open_teamsuzie/packages/chats",
     "@teamsuzie/grid-review": "link:../../../open_teamsuzie/packages/grid-review",
+    "@teamsuzie/grid-review-rag": "link:../../../open_teamsuzie/packages/grid-review-rag",
     "@teamsuzie/hosted-demo": "link:../../../open_teamsuzie/packages/hosted-demo",
     "@teamsuzie/workflows": "link:../../../open_teamsuzie/packages/workflows",
     "@teamsuzie/workspaces": "link:../../../open_teamsuzie/packages/workspaces",
