@@ -43,6 +43,9 @@ importers:
       '@teamsuzie/grid-review':
         specifier: link:../../../open_teamsuzie/packages/grid-review
         version: link:../../../open_teamsuzie/packages/grid-review
+      '@teamsuzie/grid-review-rag':
+        specifier: link:../../../open_teamsuzie/packages/grid-review-rag
+        version: link:../../../open_teamsuzie/packages/grid-review-rag
       '@teamsuzie/hosted-demo':
         specifier: link:../../../open_teamsuzie/packages/hosted-demo
         version: link:../../../open_teamsuzie/packages/hosted-demo
