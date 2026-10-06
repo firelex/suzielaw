@@ -17,7 +17,7 @@ Please report security vulnerabilities privately. Do not create a public GitHub 
 
 Send reports to:
 
-**support@teamsuzie.com**
+**security@teamsuzie.com**
 
 Please include as much detail as possible:
 
@@ -75,6 +75,6 @@ When testing, please use synthetic or public test data only. Do not upload real 
 
 ## Contact
 
-Security contact: **support@teamsuzie.com**
+Security contact: **security@teamsuzie.com**
 
 For non-security bugs, feature requests or evaluation issues, please use the normal GitHub issue tracker.
