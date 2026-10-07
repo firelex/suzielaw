@@ -6,14 +6,16 @@ For repo-level context (layout, sibling-clone setup, why a separate repo) see th
 
 ## Run
 
+The full setup (sibling clone, Node 20, `pnpm deps:build`) is in the [top-level README](../../README.md#build-your-app-this-afternoon). In short:
+
 ```bash
 cp .env.example .env
-#   → fill in SUZIELAW_AGENT_BASE_URL and SUZIELAW_AGENT_API_KEY
+#   → fill in SUZIELAW_AGENT_API_KEY (and SUZIELAW_AGENT_BASE_URL / SUZIELAW_MODEL for another provider)
 #   → optionally add SUZIELAW_GOOGLE_CLIENT_ID / SUZIELAW_GOOGLE_CLIENT_SECRET
-pnpm --filter @suzielaw/assistant dev
+cd ../.. && pnpm dev:full    # Postgres + Redis (docker compose), markitdown-agent, then this app
 ```
 
-Open <http://localhost:17502>.
+Open <http://localhost:17502> and sign in as `demo@example.com` / `demo`. Login needs Postgres and Redis; `pnpm --filter @suzielaw/assistant dev` runs only this app and expects them to be up already. For a quick look without them, add `SUZIELAW_AUTH_BYPASS=true` to `.env` (never on a shared deployment: every request becomes the demo user).
 
 ## Configuration
 
@@ -40,7 +42,7 @@ apps/suzielaw/
   src/                Express backend (auth, chat, files, matters, reviews, KB)
     config.ts         SUZIELAW_* env config
     index.ts          server bootstrap
-    tools/            legal-specific tools (CourtListener, templates, diffs)
+    tools/            legal-specific tools (legal research, templates, diffs, document edits)
   client/
     src/
       App.tsx         AppShell + Sidebar + Routes
@@ -99,35 +101,26 @@ Markdown layouts for the document types lawyers actually produce live in `apps/s
 | `client-alert` | Client alert (what happened / who it affects / what to do / open questions) |
 | `resolution` | Written consent / resolution (recitals + RESOLVED clauses + omnibus authorization) |
 
-The model reaches them through two tools: `list_templates` (catalog browse) and `get_template({id})` (fetch markdown body). Pair with `courtlistener_find_contract_precedent` for inspiration: the template gives the *layout*, the precedent gives real-world *language* to adapt. Add new templates by dropping a frontmatter-prefixed `.md` file in `templates/` and restarting the server.
+The model reaches them through two tools: `list_templates` (catalog browse) and `get_template({id})` (fetch markdown body). Add new templates by dropping a frontmatter-prefixed `.md` file in `templates/` and restarting the server.
 
-## CourtListener (case law / RECAP / citations)
+## Legal research
 
-The assistant ships with thirteen tools that wrap CourtListener's v4 REST API:
+Three tools give the model one surface over 26 official sources in 19 jurisdictions (see the [top-level README](../../README.md) for the full list):
 
 | Tool | Purpose |
 |---|---|
-| `courtlistener_search` | Search opinions, RECAP dockets/documents, oral arguments, or judges |
-| `courtlistener_get_opinion` | Fetch the full text of an opinion by id |
-| `courtlistener_get_cluster` | Case-level metadata (caption, citations, judges, headnotes) |
-| `courtlistener_get_docket` | Fetch a RECAP/PACER docket |
-| `courtlistener_lookup_citation` | Verify and resolve citations |
-| `courtlistener_get_person` | Full judge record (positions, education, ABA ratings) |
-| `courtlistener_list_courts` | Resolve court ids by jurisdiction or name |
-| `courtlistener_list_docket_entries` | Full timeline of filings on a docket |
-| `courtlistener_get_recap_document` | OCR'd text of a specific PACER filing |
-| `courtlistener_list_financial_disclosures` | Annual disclosures by judge |
-| `courtlistener_list_disclosure_agreements` | Continuing-income / post-employment agreements |
-| `courtlistener_opinions_cited` | Citation graph (forward + reverse) |
-| `courtlistener_find_contract_precedent` | Pull real-world contract exhibits from RECAP as drafting precedents |
+| `legal_search` | Search case law and legislation, routed by jurisdiction or `source_id` |
+| `legal_get_document` | Fetch a document's full text by the `source_id` and `doc_id` from a search hit (long texts truncated unless `truncate=false`) |
+| `legal_find_in_document` | Find the articles of a long piece of legislation that contain a keyword |
 
-They work unauthenticated (with a low rate limit). For real use, set a token in `.env`:
+The providers live in `src/tools/legal-research/providers/`, one file each. Most work without a key. CourtListener works unauthenticated at a low rate limit; Légifrance, Judilibre and Indian Kanoon register only when their keys are set:
 
 ```bash
 SUZIELAW_COURTLISTENER_TOKEN=<token from https://www.courtlistener.com/profile/api/>
+SUZIELAW_PISTE_CLIENT_ID=...  SUZIELAW_PISTE_CLIENT_SECRET=...   # Légifrance
+SUZIELAW_JUDILIBRE_API_KEY=...
+SUZIELAW_INDIANKANOON_API_KEY=...
 ```
-
-The Library page seeds prompts that exercise these tools — case-law research, citation verification, judge profiles, RECAP docket pulls, opinion summaries, and circuit-split surveys.
 
 ## Adding legal content
 
